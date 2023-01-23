@@ -1,0 +1,26 @@
+{
+  "name": "lastfmcollage",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "dependencies": {
+    "bandcamp-scraper": "^1.5.0",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "fuse.js": "^6.6.2",
+    "last-fm": "^5.3.0",
+    "moment": "^2.29.4",
+    "musicbrainz": "^0.2.7",
+    "pureimage": "^0.3.14",
+    "scrobbles": "^0.3.0",
+    "spotify-web-api-node": "^5.0.2",
+    "throttled-queue": "^2.1.4"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ryan Mewhorter",
+  "license": "ISC",
+  "type": "module"
+}
