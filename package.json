@@ -12,6 +12,7 @@
     "last-fm": "^5.3.0",
     "moment": "^2.29.4",
     "musicbrainz": "^0.2.7",
+    "nodemailer": "^6.9.0",
     "pureimage": "^0.3.14",
     "scrobbles": "^0.3.0",
     "spotify-web-api-node": "^5.0.2",

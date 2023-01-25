@@ -12,23 +12,25 @@ import {
   randomString,
   isBlank,
   millisecondsToTime,
-  benchmark,
+  benchmarkPromise,
+  isNotBlank,
 } from "./Utils.js";
 import querystring from "querystring";
 import https from "https";
 import cookieParser from "cookie-parser";
-
 import { fileURLToPath } from "url"; // for __dirname support
 import { dirname } from "path"; // for __dirname support
 import FileSystemCache from "./service/CacheService.js";
 import LastFmService from "./service/LastFmService.js";
+import EmailService from "./service/EmailService.js";
 
 dotenv.config();
 
+const HOST = process.env.HOST || "localhost";
 const APP_PORT = process.env.APP_PORT || 8080;
 const SPOTIFY_AUTH_PATH = "/authorize-spotify";
 const SPOTIFY_AUTH_CALLBACK_PATH = "/callback";
-const SPOTIFY_AUTH_REDIRECT_URI = `http://localhost:${APP_PORT}${SPOTIFY_AUTH_CALLBACK_PATH}`;
+const SPOTIFY_AUTH_REDIRECT_URI = `http://${HOST}:${APP_PORT}${SPOTIFY_AUTH_CALLBACK_PATH}`;
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const COOKIE_SPOTIFY_STATE = "lastfmcollage_spotify_state";
@@ -54,6 +56,10 @@ const spotifyService = new SpotifyService(
 );
 const bandcampService = new BandcampService({
   maxRequestsPerSecond: process.env.BANDCAMP_MAX_REQUESTS_PER_SECOND,
+});
+const emailService = new EmailService({
+  user: process.env.GMAIL_USER,
+  generatedPassword: process.env.GMAIL_GENERATED_PASSWORD,
 });
 
 const WHITELISTED_USERS = (process.env.WHITELISTED_LAST_FM_USERS || "")
@@ -85,9 +91,9 @@ function handleTrackError(track, err) {
  * @param {*} user
  * @returns {Promise} promise
  */
-async function loadRecentUserActivity(user, daysAgo, options = {}) {
-  let to = moment();
-  let from = moment(to).subtract(daysAgo, "days");
+async function loadRecentUserActivity(user, timeRangeOptions = {}) {
+  let to = timeRangeOptions.to || moment();
+  let from = timeRangeOptions.from || moment(to).subtract(7, "days");
   console.log(`Getting activity from ${from.toString()} to ${to.toString()}`);
 
   const reader = new RecentTracks({
@@ -248,7 +254,7 @@ app.use((req, res, next) => {
 
 app.use(express.static(__dirname + "/public"));
 
-app.get("/collage/:user/days/:days", function (req, res) {
+app.get("/collage/:user", function (req, res) {
   const user = req.params.user;
   if (isBlank(user)) {
     res.status(400);
@@ -263,37 +269,21 @@ app.get("/collage/:user/days/:days", function (req, res) {
         querystring.stringify({ redirect: req.originalUrl })
     );
   } else {
-    // Generate collage
-    let startTimestamp = moment().unix();
-    let daysAgo = req.params.days;
-    let imageFileName = `${user}-${startTimestamp}.jpg`;
-    benchmark(
-      `generate collage for user [${user}] for last [${daysAgo}] days`,
-      () => {
-        loadRecentUserActivity(user, daysAgo)
-          .then((streamedTracks) =>
-            buildActivity(streamedTracks.filter((t) => t != null))
-          )
-          .then((activity) =>
-            collageGeneratorService.generate(
-              `public/img/${imageFileName}`,
-              activity
-            )
-          )
-          .then((path) => {
-            res.type("html");
-            res
-              .status(200)
-              .send(
-                `<img src="/img/${imageFileName}" alt="${imageFileName}"/>`
-              );
-          })
-          .then(() => {
-            songLengthCache.save();
-            musicBrainzService.mbAlbumCache.save();
-          });
-      }
-    );
+    let errors = validateQueryParams(req.query);
+    if (errors.length) {
+      res.status(400);
+      res.json(errors);
+    } else {
+      generateCollage(user, req.query.email, {
+        from: moment(req.query.from),
+        to: moment(req.query.to),
+      }).then((imageFileName) => {
+        res.type("html");
+        res
+          .status(200)
+          .send(`<img src="/img/${imageFileName}" alt="${imageFileName}"/>`);
+      });
+    }
   }
 });
 
@@ -381,8 +371,77 @@ function requestSpotifyAccessToken(formData, callback) {
 }
 
 app.listen(APP_PORT);
+console.log(`App listening on port ${APP_PORT}`);
 
 process.on("exit", () => {
   songLengthCache.save();
   musicBrainzService.mbAlbumCache.save();
 });
+
+/**
+ *
+ * @param {string} lastFmUser
+ * @param {*} timeRangeOptions
+ * @returns {Promise}
+ */
+function generateCollage(lastFmUser, toEmail, timeRangeOptions) {
+  // Generate collage
+  let startTimestamp = moment().unix();
+  // let daysAgo = req.params.days;
+  let imageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
+  return benchmarkPromise(
+    `generate collage for user [${lastFmUser}] for time range [${JSON.stringify(
+      timeRangeOptions
+    )}]`,
+    loadRecentUserActivity(lastFmUser, timeRangeOptions)
+      .then((streamedTracks) =>
+        buildActivity(streamedTracks.filter((t) => t != null))
+      )
+      .then((activity) =>
+        collageGeneratorService.generate(
+          `public/img/${imageFileName}`,
+          activity
+        )
+      )
+      .then(() => {
+        songLengthCache.save();
+        musicBrainzService.mbAlbumCache.save();
+      })
+      .then(() => {
+        if (isNotBlank(toEmail)) {
+          return emailService.send({
+            to: toEmail,
+            html: `Listening activity from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${imageFileName}"/>`,
+            attachments: [
+              {
+                filename: imageFileName,
+                path: `./public/img/${imageFileName}`,
+                cid: imageFileName, //same cid value as in the html img src
+              },
+            ],
+          });
+        } else {
+          return Promise.resolve();
+        }
+      }, defaultErrorHandler)
+      .then(() => imageFileName)
+  );
+}
+
+function validateQueryParams(params) {
+  let errors = [];
+  for (let requiredParam of ["from", "to"]) {
+    if (isBlank(params[requiredParam])) {
+      errors.push(`Missing required query paramater [${requiredParam}]`);
+    }
+  }
+  for (let dateParam of ["from", "to"]) {
+    let value = params[dateParam];
+    if (isNotBlank(value) && !moment(value).isValid()) {
+      errors.push(
+        `Query paramater [${dateParam}] with value [${value}] is not a valid date.`
+      );
+    }
+  }
+  return errors;
+}

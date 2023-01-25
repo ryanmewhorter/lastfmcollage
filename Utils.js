@@ -54,3 +54,17 @@ export function benchmark(taskName, fn) {
   console.log(`Task [${taskName}] took ${Date.now() - start}ms.`);
   return result;
 }
+
+/**
+ *
+ * @param {string} taskName
+ * @param {Promise} promise
+ * @returns {Promise}
+ */
+export function benchmarkPromise(taskName, promise) {
+  let start = Date.now();
+  return promise.then((result) => {
+    console.log(`Task [${taskName}] took ${Date.now() - start}ms.`);
+    return result;
+  });
+}
