@@ -30,7 +30,9 @@ const HOST = process.env.HOST || "localhost";
 const APP_PORT = process.env.APP_PORT || 8080;
 const SPOTIFY_AUTH_PATH = "/authorize-spotify";
 const SPOTIFY_AUTH_CALLBACK_PATH = "/callback";
-const SPOTIFY_AUTH_REDIRECT_URI = `http://${HOST}:${APP_PORT}${SPOTIFY_AUTH_CALLBACK_PATH}`;
+const SPOTIFY_AUTH_REDIRECT_URI =
+  process.env.SPOTIFY_AUTH_REDIRECT_URI ||
+  `http://${HOST}:${APP_PORT}${SPOTIFY_AUTH_CALLBACK_PATH}`;
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const COOKIE_SPOTIFY_STATE = "lastfmcollage_spotify_state";
@@ -272,6 +274,23 @@ app.use((req, res, next) => {
 
 app.use(express.static(__dirname + "/public"));
 
+app.get("/", (req, res) => {
+  if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
+    res.redirect(
+      SPOTIFY_AUTH_PATH +
+        "?" +
+        querystring.stringify({ redirect: req.originalUrl })
+    );
+  } else {
+    res
+      .status(200)
+      .type("html")
+      .send(
+        "Visit <pre>/collage/<b>{LastFM User}</b>?email=<b>{Email Address}</b>?from=<b>{From date in YYYY-MM-DD format}</b>&to=<b>{To date in YYYY-MM-DD format}</b></pre> to generate and email a collage."
+      );
+  }
+});
+
 app.get("/collage/:user", function (req, res) {
   const user = req.params.user;
   if (isBlank(user)) {
@@ -292,15 +311,21 @@ app.get("/collage/:user", function (req, res) {
       res.status(400);
       res.json(errors);
     } else {
-      generateCollage(user, req.query.email, {
-        from: moment(req.query.from),
-        to: isNotBlank(req.query.to) ? moment(req.query.to) : moment(),
+      let from = moment(req.query.from);
+      let to = isNotBlank(req.query.to) ? moment(req.query.to) : moment();
+      generateAndEmailCollage(user, req.query.email, {
+        from: from,
+        to: to,
       }).then((imageFileName) => {
-        res.type("html");
-        res
-          .status(200)
-          .send(`<img src="/img/${imageFileName}" alt="${imageFileName}"/>`);
+        console.log(`Successfully generated collage image [${imageFileName}]`);
       });
+      res
+        .status(200)
+        .send(
+          `Generating lastfm collage for [${user}] from [${from.toString()}] to [${to.toString()}] and emailing to [${
+            req.query.email || ""
+          }]`
+        );
     }
   }
 });
@@ -402,7 +427,7 @@ process.on("exit", () => {
  * @param {*} timeRangeOptions
  * @returns {Promise}
  */
-function generateCollage(lastFmUser, toEmail, timeRangeOptions) {
+function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
   // Generate collage
   let startTimestamp = moment().unix();
   // let daysAgo = req.params.days;
