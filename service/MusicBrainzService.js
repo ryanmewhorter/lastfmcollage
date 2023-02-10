@@ -29,28 +29,29 @@ export default class MusicBrainzService {
   /**
    *
    * @param {string} entity
-   * @param {string} mbId
+   * @param {Track} track
    * @param {string[]} include
    * @param {Function} callback
    * @param {Function} errorHandler
    */
   lookup(
     entity,
-    mbId,
+    track,
     include = [],
     callback,
     errorHandler = defaultErrorHandler
   ) {
     requireNotBlank("entity", entity);
-    requireNotBlank("mbId", mbId);
-    const cachedMbEntityRaw = this.mbAlbumCache.get(`${entity}.${mbId}`);
+    requireNotBlank("track.album.mbId", track.album.mbId);
+    let albumMbId = track.album.mbId;
+    const cachedMbEntityRaw = this.mbAlbumCache.get(`${entity}.${albumMbId}`);
     if (cachedMbEntityRaw != null) {
-      const cachedMbEntity = JSON.parse(cachedMbEntityRaw)
-      console.debug(
-        `DEBUG: MusicBrainz cache hit for entity [${entity}] mbId [${mbId}]`
-      );
+      const cachedMbEntity = JSON.parse(cachedMbEntityRaw);
       callback(cachedMbEntity);
     } else {
+      console.log(
+        `MusicBrainz album cache miss for album [${track.album.title}] with mbId [${albumMbId}]`
+      );
       this.throttleRequest(() => {
         let queryParameters = {
           fmt: "json",
@@ -60,7 +61,7 @@ export default class MusicBrainzService {
         }
         let options = {
           hostname: HOST_NAME,
-          path: `${API_ROOT}/${entity}/${mbId}?${querystring.stringify(
+          path: `${API_ROOT}/${entity}/${albumMbId}?${querystring.stringify(
             queryParameters
           )}`,
           method: "GET",
@@ -82,14 +83,14 @@ export default class MusicBrainzService {
                 response: responseBody,
                 parameters: {
                   entity: entity,
-                  mbId: mbId,
+                  mbId: albumMbId,
                   include: include,
                 },
               };
               errorHandler(error);
             } else {
               this.mbAlbumCache.set(
-                `${entity}.${mbId}`,
+                `${entity}.${albumMbId}`,
                 JSON.stringify(responseBody)
               );
               callback(responseBody);
@@ -114,7 +115,7 @@ export default class MusicBrainzService {
     return new Promise((resolve, reject) => {
       this.lookup(
         Entity.RELEASE,
-        track.album.mbId,
+        track,
         ["recordings"],
         (releaseInfo) => {
           if (releaseInfo.media == null || releaseInfo.media.length === 0) {

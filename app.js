@@ -216,14 +216,32 @@ async function loadRecentUserActivity(user, timeRangeOptions = {}) {
 function buildActivity(streamedTracks) {
   let albums = {};
   for (let track of streamedTracks) {
-    let key = `${track.album.title} by ${track.artist}`;
+    let key = track.album.title;
     if (albums[key] == null) {
       albums[key] = {
         album: track.album,
-        length: track.length,
+        length: track.length || 0,
+        dirty: track.length == null || track.length <= 0,
+        variousArtists: false,
       };
     } else {
-      albums[key].length += track.length;
+      let albumListening = albums[key];
+      if (
+        !albumListening.variousArtists &&
+        albumListening.album.artist !== track.artist
+      ) {
+        albumListening.variousArtists = true;
+      }
+      if (track.length == null || track.length <= 0) {
+        albumListening.dirty = true;
+      } else {
+        albumListening.length += track.length;
+      }
+    }
+  }
+  for (let album of Object.values(albums)) {
+    if (isNaN(album.length) || album.length == null) {
+      album.length = -1;
     }
   }
   let results = Object.values(albums).sort((a, b) => b.length - a.length);
@@ -276,7 +294,7 @@ app.get("/collage/:user", function (req, res) {
     } else {
       generateCollage(user, req.query.email, {
         from: moment(req.query.from),
-        to: moment(req.query.to),
+        to: isNotBlank(req.query.to) ? moment(req.query.to) : moment(),
       }).then((imageFileName) => {
         res.type("html");
         res
@@ -410,8 +428,9 @@ function generateCollage(lastFmUser, toEmail, timeRangeOptions) {
       .then(() => {
         if (isNotBlank(toEmail)) {
           return emailService.send({
+            subject: `Your last.fm collage...`,
             to: toEmail,
-            html: `Listening activity from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${imageFileName}"/>`,
+            html: `Listening activity for ${lastFmUser} from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${imageFileName}"/>`,
             attachments: [
               {
                 filename: imageFileName,
@@ -430,7 +449,7 @@ function generateCollage(lastFmUser, toEmail, timeRangeOptions) {
 
 function validateQueryParams(params) {
   let errors = [];
-  for (let requiredParam of ["from", "to"]) {
+  for (let requiredParam of ["from"]) {
     if (isBlank(params[requiredParam])) {
       errors.push(`Missing required query paramater [${requiredParam}]`);
     }

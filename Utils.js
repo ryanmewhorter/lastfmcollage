@@ -64,7 +64,10 @@ export function benchmark(taskName, fn) {
 export function benchmarkPromise(taskName, promise) {
   let start = Date.now();
   return promise.then((result) => {
-    console.log(`Task [${taskName}] took ${Date.now() - start}ms.`);
+    let elapsedTime = moment.duration(Date.now() - start, "ms");
+    console.log(
+      `Task [${taskName}] took ${elapsedTime.minutes()}m ${elapsedTime.seconds()}s.`
+    );
     return result;
   });
 }

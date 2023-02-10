@@ -105,24 +105,31 @@ export default class CollageGeneratorService {
 
       drawPromises.push(
         getImage(albumListening.album.cover)
-          .then((albumCover) => {
-            console.log(
-              `Rendering album art for album #${i + 1} ['${
-                albumListening.album.title
-              }' by ${
-                albumListening.album.artist
-              }] at [x=${posX} y=${posY}] with listening time [${
-                albumListening.length
-              }]`
-            );
-            canvasCtx.drawImage(
-              albumCover,
-              posX,
-              posY + labelHeight,
-              ALBUM_ART_SIZE,
-              ALBUM_ART_SIZE
-            );
-          })
+          .then(
+            (albumCover) => {
+              console.log(
+                `Rendering album art for album #${i + 1} ['${
+                  albumListening.album.title
+                }' by ${
+                  albumListening.album.artist
+                }] at [x=${posX} y=${posY}] with listening time [${
+                  albumListening.length
+                }]`
+              );
+              canvasCtx.drawImage(
+                albumCover,
+                posX,
+                posY + labelHeight,
+                ALBUM_ART_SIZE,
+                ALBUM_ART_SIZE
+              );
+            },
+            (error) => {
+              console.error(
+                `Error getting album image for album [${albumListening.album.title}] with cover [${albumListening.album.cover}]: ${error.message}`
+              );
+            }
+          )
           .then(() => {
             if (this.showListeningTime) {
               console.log(
@@ -133,8 +140,14 @@ export default class CollageGeneratorService {
                 }] at [x=${posX} y=${posY}]`
               );
 
+              let artistLabel = albumListening.variousArtists
+                ? "Various Artists"
+                : albumListening.album.artist;
+              let albumListeningTimeLabel = albumListening.dirty
+                ? `*${albumListening.length}`
+                : albumListening.length;
               canvasCtx.fillText(
-                trimText(albumListening.album.artist, 32),
+                trimText(artistLabel, 32),
                 posX,
                 posY + labelLineHeightPx - 2,
                 cellWidth
@@ -146,7 +159,7 @@ export default class CollageGeneratorService {
                 cellWidth
               );
               canvasCtx.fillText(
-                albumListening.length,
+                albumListeningTimeLabel,
                 posX,
                 posY + 3 * labelLineHeightPx - 2,
                 cellWidth
