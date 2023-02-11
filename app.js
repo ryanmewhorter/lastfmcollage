@@ -282,15 +282,10 @@ app.get("/", (req, res) => {
   }
 });
 
-app.get("/collage/:user", function (req, res) {
-  const user = req.params.user;
-  if (isBlank(user)) {
-    res.status(400);
-    res.send("Please provide a valid last fm user");
-  } else if (!WHITELISTED_USERS.includes(user.toLowerCase())) {
-    res.status(403);
-    res.send("Nah bruh");
-  } else if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
+app.get("/collage", function (req, res) {
+  const user = req.query.user;
+
+  if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
@@ -301,6 +296,11 @@ app.get("/collage/:user", function (req, res) {
     if (errors.length) {
       res.status(400);
       res.json(errors);
+    }
+    const user = req.query.user;
+    if (!WHITELISTED_USERS.includes(user.toLowerCase())) {
+      res.status(403);
+      res.send("Nah bruh");
     } else {
       let from = moment(req.query.from);
       let to = isNotBlank(req.query.to) ? moment(req.query.to) : moment();
@@ -465,7 +465,7 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
 
 function validateQueryParams(params) {
   let errors = [];
-  for (let requiredParam of ["from"]) {
+  for (let requiredParam of ["from", "user"]) {
     if (isBlank(params[requiredParam])) {
       errors.push(`Missing required query paramater [${requiredParam}]`);
     }
