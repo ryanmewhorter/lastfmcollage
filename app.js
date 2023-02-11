@@ -262,11 +262,7 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   // check if client sent cookie
   const spotifyAccessToken = req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN];
-  if (isBlank(spotifyAccessToken)) {
-    console.log(
-      `Request does not have cookie '${COOKIE_SPOTIFY_ACCESS_TOKEN}'`
-    );
-  } else {
+  if (isNotBlank(spotifyAccessToken)) {
     spotifyService.spotifyApi.setAccessToken(spotifyAccessToken);
   }
   next(); // <-- important!
@@ -275,7 +271,7 @@ app.use((req, res, next) => {
 app.use(express.static(__dirname + "/public"));
 
 app.get("/", (req, res) => {
-  if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
+  if (!isHealthCheck(req) && req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
@@ -488,4 +484,13 @@ function validateQueryParams(params) {
     }
   }
   return errors;
+}
+
+/**
+ * Checks if request is from ELB HealthChecker
+ * @param {express.Request} req
+ */
+function isHealthCheck(req) {
+  let userAgent = req.get("user-agent");
+  return isNotBlank(userAgent) && userAgent.includes("ELB-HealthChecker");
 }
