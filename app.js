@@ -271,7 +271,9 @@ app.use((req, res, next) => {
 app.use(express.static(__dirname + "/public"));
 
 app.get("/", (req, res) => {
-  if (!isHealthCheck(req) && req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
+  if (isHealthCheck(req)) {
+    res.status(200).send("Ok");
+  } else if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
@@ -283,8 +285,6 @@ app.get("/", (req, res) => {
 });
 
 app.get("/collage", function (req, res) {
-  const user = req.query.user;
-
   if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
     res.redirect(
       SPOTIFY_AUTH_PATH +
