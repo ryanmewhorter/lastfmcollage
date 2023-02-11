@@ -23,6 +23,7 @@ import { dirname } from "path"; // for __dirname support
 import FileSystemCache from "./service/CacheService.js";
 import LastFmService from "./service/LastFmService.js";
 import EmailService from "./service/EmailService.js";
+import fs from "fs";
 
 dotenv.config();
 
@@ -431,12 +432,15 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
       .then((streamedTracks) =>
         buildActivity(streamedTracks.filter((t) => t != null))
       )
-      .then((activity) =>
+      .then((activity) => {
+        if (!fs.existsSync("public/img")) {
+          fs.mkdirSync("public/img");
+        }
         collageGeneratorService.generate(
           `public/img/${imageFileName}`,
           activity
-        )
-      )
+        );
+      })
       .then(() => {
         songLengthCache.save();
         musicBrainzService.mbAlbumCache.save();
