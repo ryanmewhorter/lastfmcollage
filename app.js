@@ -278,12 +278,7 @@ app.get("/", (req, res) => {
         querystring.stringify({ redirect: req.originalUrl })
     );
   } else {
-    res
-      .status(200)
-      .type("html")
-      .send(
-        "Visit <pre>/collage/<b>{LastFM User}</b>?email=<b>{Email Address}</b>?from=<b>{From date in YYYY-MM-DD format}</b>&to=<b>{To date in YYYY-MM-DD format}</b></pre> to generate and email a collage."
-      );
+    res.status(200).sendFile("/public/index.html");
   }
 });
 

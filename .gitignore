@@ -3,4 +3,4 @@ node_modules/
 .vscode/
 build/
 *cache.json
-public/
+public/img/
