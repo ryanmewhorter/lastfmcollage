@@ -24,6 +24,7 @@ import FileSystemCache from "./service/CacheService.js";
 import LastFmService from "./service/LastFmService.js";
 import EmailService from "./service/EmailService.js";
 import fs from "fs";
+import helmet from "helmet";
 
 dotenv.config();
 
@@ -256,6 +257,8 @@ function buildActivity(streamedTracks) {
 }
 
 const app = express();
+
+app.use(helmet());
 
 app.use(cookieParser());
 // set a cookie
