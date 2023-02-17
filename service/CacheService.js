@@ -74,4 +74,10 @@ export default class FileSystemCache {
     }
     return null;
   }
+
+  destroy() {
+    if (fs.existsSync(this.fileName)) {
+      fs.unlinkSync(this.fileName);
+    }
+  }
 }

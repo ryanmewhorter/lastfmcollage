@@ -20,9 +20,17 @@
     "throttled-queue": "^2.1.4"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "precommit": "pretty-quick --staged",
+    "prepare": "husky install .husky"
   },
   "author": "Ryan Mewhorter",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "chai": "^4.3.7",
+    "husky": "^8.0.3",
+    "prettier": "^2.8.4",
+    "pretty-quick": "^3.1.3"
+  }
 }
