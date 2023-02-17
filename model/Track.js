@@ -16,5 +16,4 @@ export default class Track {
     this.length = length;
     this.mbId = mbId;
   }
-
 }

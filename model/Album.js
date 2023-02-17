@@ -1,10 +1,10 @@
 export default class Album {
   /**
    * Create a new Album
-   * @param {string} title 
-   * @param {string} artist 
-   * @param {string} cover 
-   * @param {string} mbId 
+   * @param {string} title
+   * @param {string} artist
+   * @param {string} cover
+   * @param {string} mbId
    */
   constructor(title, artist, cover, mbId) {
     this.title = title;

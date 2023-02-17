@@ -8,7 +8,10 @@ export default class LastFmService {
     requireNotBlank("lastFmApiKey", lastFmApiKey);
     this.lastFmApiKey = lastFmApiKey;
     this.lastFm = new LastFM(process.env.LAST_FM_API_KEY);
-    this.throttleRequest = throttledQueue(options.maxRequestsPerSecond || 1, 1000);
+    this.throttleRequest = throttledQueue(
+      options.maxRequestsPerSecond || 1,
+      1000
+    );
   }
 
   /**
@@ -43,7 +46,11 @@ export default class LastFmService {
    */
   getTrackDurationFromLastFm(track) {
     return this.getTrackInfoFromLastFm(track).then((lfmTrackInfo) => {
-      if (lfmTrackInfo != null && lfmTrackInfo.duration != null && lfmTrackInfo.duration > 0) {
+      if (
+        lfmTrackInfo != null &&
+        lfmTrackInfo.duration != null &&
+        lfmTrackInfo.duration > 0
+      ) {
         return Promise.resolve(lfmTrackInfo.duration * 1000);
       }
       return Promise.resolve(null);
