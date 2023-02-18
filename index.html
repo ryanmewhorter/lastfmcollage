@@ -18,7 +18,7 @@
   <body data-bs-theme="light">
     <main class="col-11 col-sm-8 col-md-6 mx-auto p-1">
       <h1 class="mb-3">Last.fm Collage Generator</h1>
-      <form action="/collage">
+      <form action="/collage" method="post">
         <input
           class="form-control mb-3"
           placeholder="Last.fm User"
@@ -43,8 +43,10 @@
           type="datetime-local"
           id="to"
           name="to" />
+        <input type="hidden" name="timezone" id="timezone" value="" />
         <button class="btn btn-primary" type="submit">Submit</button>
       </form>
     </main>
+    <script src="timezone-loader.js"></script>
   </body>
 </html>

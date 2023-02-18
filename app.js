@@ -1,4 +1,4 @@
-import moment from "moment";
+import moment from "moment-timezone";
 import { RecentTracks } from "scrobbles";
 import Track from "./model/Track.js";
 import CollageGeneratorService from "./service/CollageGeneratorService.js";
@@ -258,10 +258,14 @@ function buildActivity(streamedTracks) {
 
 const app = express();
 
+// Middleware
 app.use(helmet());
 
+app.use(express.json());
+
+app.use(express.urlencoded({ extended: true }));
+
 app.use(cookieParser());
-// set a cookie
 
 app.use((req, res, next) => {
   // check if client sent cookie
@@ -272,43 +276,45 @@ app.use((req, res, next) => {
   next(); // <-- important!
 });
 
-app.use(express.static(__dirname + "/public"));
+app.use(express.static(`${__dirname}/public`));
 
 app.get("/", (req, res) => {
   if (isHealthCheck(req)) {
     res.status(200).send("Ok");
-  } else if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
+  } else if (isBlank(req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN])) {
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
         querystring.stringify({ redirect: req.originalUrl })
     );
   } else {
-    res.status(200).sendFile("/public/index.html");
+    res.status(200).sendFile(`${__dirname}/index.html`);
   }
 });
 
-app.get("/collage", function (req, res) {
-  if (req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN] == null) {
+app.post("/collage", function (req, res) {
+  if (isBlank(req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN])) {
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
         querystring.stringify({ redirect: req.originalUrl })
     );
   } else {
-    let errors = validateQueryParams(req.query);
+    let errors = validateQueryParams(req.body);
     if (errors.length) {
       res.status(400);
       res.json(errors);
     }
-    const user = req.query.user;
+    const user = req.body.user;
     if (!WHITELISTED_USERS.includes(user.toLowerCase())) {
       res.status(403);
       res.send("Nah bruh");
     } else {
-      let from = moment(req.query.from);
-      let to = isNotBlank(req.query.to) ? moment(req.query.to) : moment();
-      generateAndEmailCollage(user, req.query.email, {
+      let from = moment(req.body.from).tz(req.body.timezone);
+      let to = isNotBlank(req.body.to)
+        ? moment(req.body.to).tz(req.body.timezone)
+        : moment().tz(req.body.timezone);
+      generateAndEmailCollage(user, req.body.email, {
         from: from,
         to: to,
       }).then((imageFileName) => {
@@ -317,8 +323,8 @@ app.get("/collage", function (req, res) {
       res
         .status(200)
         .send(
-          `Generating lastfm collage for [${user}] from [${from.toString()}] to [${to.toString()}] and emailing to [${
-            req.query.email || ""
+          `Generating lastfm collage for [${user}] from [${from.format()}] to [${to.format()}] and emailing to [${
+            req.body.email || ""
           }]`
         );
     }
