@@ -171,7 +171,19 @@ export default class CollageGeneratorService {
     }
 
     return Promise.all(drawPromises)
-      .then(() => save(canvas, path))
-      .then(() => path);
+      .then(
+        () => save(canvas, path),
+        (reason) => {
+          console.error(`Error occurred drawing collage: ${reason}`);
+          throw new Error(reason);
+        }
+      )
+      .then(
+        () => path,
+        (reason) => {
+          console.error(`Error occurred saving collage to file: ${reason}`);
+          throw new Error(reason);
+        }
+      );
   }
 }

@@ -14,6 +14,7 @@ import {
   millisecondsToTime,
   benchmarkPromise,
   isNotBlank,
+  requireNotBlank,
 } from "./Utils.js";
 import querystring from "querystring";
 import https from "https";
@@ -73,6 +74,11 @@ const WHITELISTED_USERS = (process.env.WHITELISTED_LAST_FM_USERS || "")
 
 const __filename = fileURLToPath(import.meta.url); // for __dirname support
 const __dirname = dirname(__filename);
+const PUBLIC_IMG_DIR = `${__dirname}/public/img`;
+
+if (!fs.existsSync(PUBLIC_IMG_DIR)) {
+  fs.mkdirSync(PUBLIC_IMG_DIR);
+}
 
 function defaultErrorHandler(err) {
   if (err instanceof Error) {
@@ -88,6 +94,15 @@ function handleTrackError(track, err) {
     `Error occurred processing track '${track.title}' by ${track.artist}:`
   );
   defaultErrorHandler(err);
+}
+
+function sendGenericFailureMessage(toEmail) {
+  requireNotBlank(toEmail);
+  emailService.send({
+    subject: `Your last.fm collage...`,
+    to: toEmail,
+    text: "An error occurred and your collage could not be generated.",
+  });
 }
 
 /**
@@ -431,29 +446,33 @@ process.on("exit", () => {
 function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
   // Generate collage
   let startTimestamp = moment().unix();
-  // let daysAgo = req.params.days;
   let imageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
   return benchmarkPromise(
-    `generate collage for user [${lastFmUser}] for time range [${JSON.stringify(
-      timeRangeOptions
-    )}]`,
+    `generate collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`,
     loadRecentUserActivity(lastFmUser, timeRangeOptions)
       .then((streamedTracks) =>
         buildActivity(streamedTracks.filter((t) => t != null))
       )
-      .then((activity) => {
-        if (!fs.existsSync("public/img")) {
-          fs.mkdirSync("public/img");
+      .then(
+        (activity) =>
+          collageGeneratorService.generate(
+            `${PUBLIC_IMG_DIR}/${imageFileName}`,
+            activity
+          ),
+        defaultErrorHandler
+      )
+      .then(
+        () => {
+          songLengthCache.save();
+          musicBrainzService.mbAlbumCache.save();
+        },
+        (reason) => {
+          if (isNotBlank(toEmail)) {
+            sendGenericFailureMessage(toEmail);
+          }
+          defaultErrorHandler(reason);
         }
-        collageGeneratorService.generate(
-          `public/img/${imageFileName}`,
-          activity
-        );
-      })
-      .then(() => {
-        songLengthCache.save();
-        musicBrainzService.mbAlbumCache.save();
-      })
+      )
       .then(() => {
         if (isNotBlank(toEmail)) {
           return emailService.send({
@@ -463,7 +482,7 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
             attachments: [
               {
                 filename: imageFileName,
-                path: `./public/img/${imageFileName}`,
+                path: `${PUBLIC_IMG_DIR}/${imageFileName}`,
                 cid: imageFileName, //same cid value as in the html img src
               },
             ],
@@ -472,7 +491,15 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
           return Promise.resolve();
         }
       }, defaultErrorHandler)
-      .then(() => imageFileName)
+      .then(
+        () => imageFileName,
+        (reason) => {
+          if (isNotBlank(toEmail)) {
+            sendGenericFailureMessage(toEmail);
+          }
+          defaultErrorHandler(reason);
+        }
+      )
   );
 }
 

@@ -48,6 +48,7 @@ export default class EmailService {
       mailOptions.from = mailOptions.from || this.user;
       this.transporter.sendMail(mailOptions, (error, info) => {
         if (error) {
+          console.error(`Error occurred sending email: `, error.message);
           reject(error);
         } else {
           resolve(info);
