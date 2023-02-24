@@ -23,7 +23,7 @@
   "scripts": {
     "test": "node node_modules/mocha/bin/mocha.js 'test/**/*.js'",
     "precommit": "pretty-quick --staged",
-    "prepare": "husky install .husky"
+    "prepare": "sh ./npm-prepare.sh"
   },
   "author": "Ryan Mewhorter",
   "license": "ISC",
