@@ -18,6 +18,7 @@
     "pureimage": "^0.3.14",
     "scrobbles": "^0.3.0",
     "spotify-web-api-node": "^5.0.2",
+    "string-similarity": "^4.0.4",
     "throttled-queue": "^2.1.4"
   },
   "scripts": {

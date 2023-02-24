@@ -26,6 +26,7 @@ import LastFmService from "./service/LastFmService.js";
 import EmailService from "./service/EmailService.js";
 import fs from "fs";
 import helmet from "helmet";
+import stringSimilarity from "string-similarity";
 
 dotenv.config();
 
@@ -245,10 +246,15 @@ function buildActivity(streamedTracks) {
       };
     } else {
       let albumListening = albums[key];
-      if (
-        !albumListening.variousArtists &&
-        albumListening.album.artist !== track.artist
-      ) {
+      // Using string similarity because Last.fm data is not normalized
+      let artistNameSimilarity = stringSimilarity.compareTwoStrings(
+        albumListening.album.artist,
+        track.artist
+      );
+      if (!albumListening.variousArtists && artistNameSimilarity < 0.8) {
+        console.warn(
+          `WARN: Track [${track.title}] artist [${track.artist}] is different than album artist [${albumListening.album.artist}], similarity = [${artistNameSimilarity}] - marking album as various artists`
+        );
         albumListening.variousArtists = true;
       }
       if (track.length == null || track.length <= 0) {
