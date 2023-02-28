@@ -284,7 +284,11 @@ function buildActivity(streamedTracks) {
 const app = express();
 
 // Middleware
-app.use(helmet());
+if (
+  getConfigValueString("USE_EXPRESS_HELMET", "false").toLowerCase() === "true"
+) {
+  app.use(helmet());
+}
 
 app.use(express.json());
 
