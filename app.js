@@ -30,15 +30,16 @@ import stringSimilarity from "string-similarity";
 
 dotenv.config();
 
-const HOST = process.env.HOST || "localhost";
-const APP_PORT = process.env.APP_PORT || 8080;
+const HOST = getConfigValueString("HOST", "localhost");
+const APP_PORT = getConfigValueNumber("APP_PORT", "8080");
 const SPOTIFY_AUTH_PATH = "/authorize-spotify";
 const SPOTIFY_AUTH_CALLBACK_PATH = "/callback";
-const SPOTIFY_AUTH_REDIRECT_URI =
-  process.env.SPOTIFY_AUTH_REDIRECT_URI ||
-  `http://${HOST}:${APP_PORT}${SPOTIFY_AUTH_CALLBACK_PATH}`;
-const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+const SPOTIFY_AUTH_REDIRECT_URI = getConfigValueString(
+  "SPOTIFY_AUTH_REDIRECT_URI",
+  `http://${HOST}:${APP_PORT}${SPOTIFY_AUTH_CALLBACK_PATH}`
+);
+const SPOTIFY_CLIENT_ID = getConfigValueString("SPOTIFY_CLIENT_ID");
+const SPOTIFY_CLIENT_SECRET = getConfigValueString("SPOTIFY_CLIENT_SECRET");
 const COOKIE_SPOTIFY_STATE = "lastfmcollage_spotify_state";
 const COOKIE_SPOTIFY_ACCESS_TOKEN = "lastfmcollage_spotify_auth_token";
 
@@ -46,9 +47,12 @@ const songLengthCache = new FileSystemCache("./song-length-cache.json", {
   keyTranslate: (track) =>
     `${track.artist}.${track.album.title}.${track.title}`.toLowerCase(),
 });
-const lastFmService = new LastFmService(process.env.LAST_FM_API_KEY, {
-  maxRequestsPerSecond: process.env.LAST_FM_MAX_REQUESTS_PER_SECOND,
-});
+const lastFmService = new LastFmService(
+  getConfigValueString("LAST_FM_API_KEY"),
+  {
+    maxRequestsPerSecond: process.env.LAST_FM_MAX_REQUESTS_PER_SECOND,
+  }
+);
 const collageGeneratorService = new CollageGeneratorService({
   showListeningTime: process.env.SHOW_LISTENING_TIME === "true",
 });
@@ -315,6 +319,7 @@ app.get("/", (req, res) => {
 
 app.post("/collage", function (req, res) {
   if (isBlank(req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN])) {
+    console.log(`No spotify access token, redirection to ${SPOTIFY_AUTH_PATH}`);
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
@@ -435,8 +440,23 @@ function requestSpotifyAccessToken(formData, callback) {
   req.end();
 }
 
-app.listen(APP_PORT);
-console.log(`App listening on port ${APP_PORT}`);
+const server = app.listen(APP_PORT, (err) => {
+  if (err) defaultErrorHandler(err);
+  console.log(`App listening on port ${APP_PORT}`);
+});
+
+server.keepAliveTimeout = getConfigValueNumber(
+  "SERVER_KEEP_ALIVE_TIMEOUT_MS",
+  "60000"
+);
+server.headersTimeout = getConfigValueNumber(
+  "SERVER_HEADERS_TIMEOUT_MS",
+  "60000"
+);
+
+console.log(
+  `App keepAliveTimeout [${server.keepAliveTimeout}] headersTimeout [${server.headersTimeout}]`
+);
 
 process.on("exit", () => {
   songLengthCache.save();
@@ -453,6 +473,9 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
   // Generate collage
   let startTimestamp = moment().unix();
   let imageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
+  console.log(
+    `Generating collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`
+  );
   return benchmarkPromise(
     `generate collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`,
     loadRecentUserActivity(lastFmUser, timeRangeOptions)
@@ -534,4 +557,21 @@ function validateQueryParams(params) {
 function isHealthCheck(req) {
   let userAgent = req.get("user-agent");
   return isNotBlank(userAgent) && userAgent.includes("ELB-HealthChecker");
+}
+
+function getConfigValueString(key, defaultValue) {
+  if (isNotBlank(process.env[key])) {
+    return process.env[key];
+  }
+  if (defaultValue == null) {
+    throw new Error(`Required configuration value not found for key [${key}]`);
+  }
+  return defaultValue;
+}
+
+function getConfigValueNumber(key, defaultValue) {
+  let value = getConfigValueString(key, defaultValue);
+  if (isNotBlank(value)) {
+    return parseInt(value, 10);
+  }
 }
