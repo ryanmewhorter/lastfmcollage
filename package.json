@@ -1,6 +1,6 @@
 {
   "name": "lastfmcollage",
-  "version": "20230223.10",
+  "version": "1.0.0",
   "description": "",
   "main": "app.js",
   "dependencies": {
