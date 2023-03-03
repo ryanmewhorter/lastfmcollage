@@ -43,7 +43,7 @@ export default class FileSystemCache {
     for (let key of Object.keys(this.store)) {
       if (now >= this.store[key].e) {
         console.log(`Key ${key} has expired.`);
-        this.store[key] = undefined;
+        delete this.store[key];
       }
     }
   }
