@@ -27,6 +27,7 @@ import EmailService from "./service/EmailService.js";
 import fs from "fs";
 import helmet from "helmet";
 import stringSimilarity from "string-similarity";
+import PromiseQueue from "promise-queue";
 
 dotenv.config();
 
@@ -71,6 +72,11 @@ const emailService = new EmailService({
   user: process.env.GMAIL_USER,
   generatedPassword: process.env.GMAIL_GENERATED_PASSWORD,
 });
+
+const collageGenerationQueue = new PromiseQueue(
+  getConfigValueNumber("GENERATE_COLLAGE_QUEUE_ACTIVE_LIMIT", 1),
+  getConfigValueNumber("GENERATE_COLLAGE_QUEUE_LIMIT", 5)
+);
 
 const WHITELISTED_USERS = (process.env.WHITELISTED_LAST_FM_USERS || "")
   .toLowerCase()
@@ -321,7 +327,7 @@ app.get("/", (req, res) => {
   }
 });
 
-app.post("/collage", function (req, res) {
+app.post("/collage", (req, res) => {
   if (isBlank(req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN])) {
     console.log(`No spotify access token, redirection to ${SPOTIFY_AUTH_PATH}`);
     res.redirect(
@@ -361,7 +367,7 @@ app.post("/collage", function (req, res) {
   }
 });
 
-app.get(SPOTIFY_AUTH_PATH, function (req, res) {
+app.get(SPOTIFY_AUTH_PATH, (req, res) => {
   const state = randomString();
 
   res.cookie(COOKIE_SPOTIFY_STATE, state);
@@ -378,7 +384,7 @@ app.get(SPOTIFY_AUTH_PATH, function (req, res) {
   );
 });
 
-app.get(SPOTIFY_AUTH_CALLBACK_PATH, function (req, res) {
+app.get(SPOTIFY_AUTH_CALLBACK_PATH, (req, res) => {
   const code = req.query.code || null;
   const returnedState = req.query.state || null;
   const actualState = req.cookies[COOKIE_SPOTIFY_STATE];
@@ -474,66 +480,68 @@ process.on("exit", () => {
  * @returns {Promise}
  */
 function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
-  // Generate collage
-  let startTimestamp = moment().unix();
-  let imageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
-  console.log(
-    `Generating collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`
-  );
-  return benchmarkPromise(
-    `generate collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`,
-    loadRecentUserActivity(lastFmUser, timeRangeOptions)
-      .then((streamedTracks) =>
-        buildActivity(streamedTracks.filter((t) => t != null))
-      )
-      .then(
-        (activity) =>
-          collageGeneratorService.generate(
-            `${PUBLIC_IMG_DIR}/${imageFileName}`,
-            activity
-          ),
-        defaultErrorHandler
-      )
-      .then(
-        () => {
-          songLengthCache.save();
-          musicBrainzService.mbAlbumCache.save();
-        },
-        (reason) => {
-          if (isNotBlank(toEmail)) {
-            sendGenericFailureMessage(toEmail);
+  return collageGenerationQueue.add(() => {
+    // Generate collage
+    let startTimestamp = moment().unix();
+    let imageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
+    console.log(
+      `Generating collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`
+    );
+    return benchmarkPromise(
+      `generate collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`,
+      loadRecentUserActivity(lastFmUser, timeRangeOptions)
+        .then((streamedTracks) =>
+          buildActivity(streamedTracks.filter((t) => t != null))
+        )
+        .then(
+          (activity) =>
+            collageGeneratorService.generate(
+              `${PUBLIC_IMG_DIR}/${imageFileName}`,
+              activity
+            ),
+          defaultErrorHandler
+        )
+        .then(
+          () => {
+            songLengthCache.save();
+            musicBrainzService.mbAlbumCache.save();
+          },
+          (reason) => {
+            if (isNotBlank(toEmail)) {
+              sendGenericFailureMessage(toEmail);
+            }
+            defaultErrorHandler(reason);
           }
-          defaultErrorHandler(reason);
-        }
-      )
-      .then(() => {
-        if (isNotBlank(toEmail)) {
-          return emailService.send({
-            subject: `Your last.fm collage...`,
-            to: toEmail,
-            html: `Listening activity for ${lastFmUser} from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${imageFileName}"/>`,
-            attachments: [
-              {
-                filename: imageFileName,
-                path: `${PUBLIC_IMG_DIR}/${imageFileName}`,
-                cid: imageFileName, //same cid value as in the html img src
-              },
-            ],
-          });
-        } else {
-          return Promise.resolve();
-        }
-      }, defaultErrorHandler)
-      .then(
-        () => imageFileName,
-        (reason) => {
+        )
+        .then(() => {
           if (isNotBlank(toEmail)) {
-            sendGenericFailureMessage(toEmail);
+            return emailService.send({
+              subject: `Your last.fm collage...`,
+              to: toEmail,
+              html: `Listening activity for ${lastFmUser} from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${imageFileName}"/>`,
+              attachments: [
+                {
+                  filename: imageFileName,
+                  path: `${PUBLIC_IMG_DIR}/${imageFileName}`,
+                  cid: imageFileName, //same cid value as in the html img src
+                },
+              ],
+            });
+          } else {
+            return Promise.resolve();
           }
-          defaultErrorHandler(reason);
-        }
-      )
-  );
+        }, defaultErrorHandler)
+        .then(
+          () => imageFileName,
+          (reason) => {
+            if (isNotBlank(toEmail)) {
+              sendGenericFailureMessage(toEmail);
+            }
+            defaultErrorHandler(reason);
+          }
+        )
+    );
+  });
 }
 
 function validateQueryParams(params) {

@@ -50,8 +50,9 @@ export function trimText(text, maxLength, trimmedIndicator = "...") {
 
 export function benchmark(taskName, fn) {
   let start = Date.now();
+  logTaskStart(taskName, start);
   let result = fn();
-  console.log(`Task [${taskName}] took ${Date.now() - start}ms.`);
+  logTaskComplete(taskName, start);
   return result;
 }
 
@@ -63,11 +64,23 @@ export function benchmark(taskName, fn) {
  */
 export function benchmarkPromise(taskName, promise) {
   let start = Date.now();
+  logTaskStart(taskName, start);
   return promise.then((result) => {
-    let elapsedTime = moment.duration(Date.now() - start, "ms");
-    console.log(
-      `Task [${taskName}] took ${elapsedTime.minutes()}m ${elapsedTime.seconds()}s.`
-    );
+    logTaskComplete(taskName, start);
     return result;
   });
+}
+
+function logTaskStart(taskName, start) {
+  console.log(`Task [${taskName}] started at [${moment.utc(start).format()}].`);
+}
+
+function logTaskComplete(taskName, start) {
+  let end = Date.now();
+  let elapsedTime = moment.duration(end - start, "ms");
+  console.log(
+    `Task [${taskName}] completed at [${moment
+      .utc(end)
+      .format()}] and took ${elapsedTime.minutes()}m ${elapsedTime.seconds()}s.`
+  );
 }
