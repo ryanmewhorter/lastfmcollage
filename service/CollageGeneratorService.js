@@ -4,6 +4,7 @@ import https from "https";
 import * as PImage from "pureimage";
 import * as fs from "fs";
 import { trimText } from "../Utils.js";
+import ActivitySummary from "../model/ActivitySummary.js";
 
 const ALBUM_ART_SIZE = 300;
 
@@ -51,6 +52,7 @@ function getImage(url) {
  *
  * @param {Bitmap} image
  * @param {string} fileName
+ * @returns {Promise<void>}
  */
 function save(image, fileName) {
   return getEncodeFunction(fileName)(image, fs.createWriteStream(fileName));
@@ -67,14 +69,17 @@ export default class CollageGeneratorService {
   /**
    *
    * @param {string} path
-   * @param {any} activity
-   * @returns {Promise}
+   * @param {ActivitySummary} activitySummary
+   * @returns {Promise<ActivitySummary>}
    */
-  generate(path, activity) {
+  generate(path, activitySummary) {
     if (fs.existsSync(path)) {
       fs.unlinkSync(path);
     }
-    const gridSize = Math.min(5, Math.ceil(Math.sqrt(activity.length)));
+    const gridSize = Math.min(
+      5,
+      Math.ceil(Math.sqrt(activitySummary.results.length))
+    );
     const labelLineHeightPx = 16;
     const labelLines = 3;
     const labelHeight = labelLines * labelLineHeightPx;
@@ -97,8 +102,8 @@ export default class CollageGeneratorService {
 
     let drawPromises = [];
 
-    for (let i = 0; i < activity.length; i++) {
-      let albumListening = activity[i];
+    for (let i = 0; i < activitySummary.results.length; i++) {
+      let albumListening = activitySummary.results[i];
       let col = i % gridSize;
       let row = Math.floor(i / gridSize);
       let [posX, posY] = [col * cellWidth, row * cellHeight];
@@ -179,7 +184,7 @@ export default class CollageGeneratorService {
         }
       )
       .then(
-        () => path,
+        () => activitySummary,
         (reason) => {
           console.error(`Error occurred saving collage to file: ${reason}`);
           throw new Error(reason);

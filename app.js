@@ -29,6 +29,7 @@ import helmet from "helmet";
 import stringSimilarity from "string-similarity";
 import PromiseQueue from "promise-queue";
 import winston from "winston";
+import ActivitySummary from "./model/ActivitySummary.js";
 
 dotenv.config();
 
@@ -125,12 +126,14 @@ function sendGenericFailureMessage(toEmail) {
 /**
  *
  * @param {*} user
+ * @param {moment.Moment} from
+ * @param {moment.Moment} to
  * @returns {Promise} promise
  */
-async function loadRecentUserActivity(user, timeRangeOptions = {}) {
-  let to = timeRangeOptions.to || moment();
-  let from = timeRangeOptions.from || moment(to).subtract(7, "days");
-  logger.info(`Getting activity from ${from.toString()} to ${to.toString()}`);
+async function loadRecentUserActivity(user, from, to) {
+  to = to || moment();
+  from = from || moment(to).subtract(7, "days");
+  logger.info(`Getting activity from ${from.format()} to ${to.format()}`);
 
   const reader = new RecentTracks({
     apikey: process.env.LAST_FM_API_KEY,
@@ -246,11 +249,13 @@ async function loadRecentUserActivity(user, timeRangeOptions = {}) {
 }
 
 /**
- *
+ * Build activity summary
  * @param {Track[]} streamedTracks
+ * @returns {ActivitySummary}
  */
-function buildActivity(streamedTracks) {
+function buildActivity(user, timeFrom, timeTo, streamedTracks) {
   let albums = {};
+  let messages = [];
   for (let track of streamedTracks) {
     let key = track.album.title;
     if (albums[key] == null) {
@@ -275,6 +280,9 @@ function buildActivity(streamedTracks) {
       }
       if (track.length == null || track.length <= 0) {
         albumListening.dirty = true;
+        messages.push(
+          `${track.artist} - ${track.title} song length not found.`
+        );
       } else {
         albumListening.length += track.length;
       }
@@ -290,7 +298,8 @@ function buildActivity(streamedTracks) {
     albumEntry.length =
       albumEntry.length > 0 ? millisecondsToTime(albumEntry.length) : null;
   }
-  return results.slice(0, Math.min(25, results.length));
+  results = results.slice(0, Math.min(25, results.length));
+  return new ActivitySummary(user, timeFrom, timeTo, results, messages);
 }
 
 const app = express();
@@ -356,12 +365,13 @@ app.post("/collage", (req, res) => {
       let to = isNotBlank(req.body.to)
         ? moment(req.body.to).tz(req.body.timezone)
         : moment().tz(req.body.timezone);
-      generateAndEmailCollage(user, req.body.email, {
-        from: from,
-        to: to,
-      }).then((imageFileName) => {
-        logger.info(`Successfully generated collage image [${imageFileName}]`);
-      });
+      generateAndEmailCollage(user, req.body.email, from, to).then(
+        (imageFileName) => {
+          logger.info(
+            `Successfully generated collage image [${imageFileName}]`
+          );
+        }
+      );
       res
         .status(200)
         .send(
@@ -482,23 +492,30 @@ process.on("exit", () => {
 /**
  *
  * @param {string} lastFmUser
- * @param {*} timeRangeOptions
+ * @param {string} toEmail
+ * @param {moment.Moment} from
+ * @param {moment.Moment} to
  * @returns {Promise}
  */
-function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
+function generateAndEmailCollage(lastFmUser, toEmail, from, to) {
   return collageGenerationQueue.add(() => {
     // Generate collage
     let startTimestamp = moment().unix();
     let collageImageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
     logger.info(
-      `Generating collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`
+      `Generating collage for user [${lastFmUser}] from [${from.format()}] to [${to.format()}]`
     );
     let collageImageFilePath = `${PUBLIC_IMG_DIR}/${collageImageFileName}`;
     return benchmarkPromise(
-      `generate collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`,
-      loadRecentUserActivity(lastFmUser, timeRangeOptions)
+      `generate collage for user [${lastFmUser}] from [${from.format()}] to [${to.format()}]`,
+      loadRecentUserActivity(lastFmUser, from, to)
         .then((streamedTracks) =>
-          buildActivity(streamedTracks.filter((t) => t != null))
+          buildActivity(
+            lastFmUser,
+            from,
+            to,
+            streamedTracks.filter((t) => t != null)
+          )
         )
         .then(
           (activity) =>
@@ -506,9 +523,10 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
           defaultErrorHandler
         )
         .then(
-          () => {
+          (activitySummary) => {
             songLengthCache.save();
             musicBrainzService.mbAlbumCache.save();
+            return activitySummary;
           },
           (reason) => {
             if (isNotBlank(toEmail)) {
@@ -517,13 +535,17 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
             defaultErrorHandler(reason);
           }
         )
-        .then(() => {
+        .then((activitySummary) => {
           if (isNotBlank(toEmail)) {
+            let htmlBody = `Listening activity for ${lastFmUser} from ${from.format()} to ${to.format()}:<br/><img src="cid:${collageImageFileName}"/>`;
+            if (activitySummary.messages.length) {
+              htmlBody += `<br>${activitySummary.messages.join("<br>")}`;
+            }
             return emailService
               .send({
                 subject: `Your last.fm collage...`,
                 to: toEmail,
-                html: `Listening activity for ${lastFmUser} from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${collageImageFileName}"/>`,
+                html: htmlBody,
                 attachments: [
                   {
                     filename: collageImageFileName,
@@ -557,7 +579,7 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
 
 function validateQueryParams(params) {
   let errors = [];
-  for (let requiredParam of ["from", "user"]) {
+  for (let requiredParam of ["email", "from", "user"]) {
     if (isBlank(params[requiredParam])) {
       errors.push(`Missing required query paramater [${requiredParam}]`);
     }
