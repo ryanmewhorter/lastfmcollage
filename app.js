@@ -28,6 +28,7 @@ import fs from "fs";
 import helmet from "helmet";
 import stringSimilarity from "string-similarity";
 import PromiseQueue from "promise-queue";
+import winston from "winston";
 
 dotenv.config();
 
@@ -87,21 +88,26 @@ const __filename = fileURLToPath(import.meta.url); // for __dirname support
 const __dirname = dirname(__filename);
 const PUBLIC_IMG_DIR = `${__dirname}/public/img`;
 
+const logger = winston.createLogger({
+  level: getConfigValueString("LOG_LEVEL", "warn"),
+  transports: [new winston.transports.Console()],
+});
+
 if (!fs.existsSync(PUBLIC_IMG_DIR)) {
   fs.mkdirSync(PUBLIC_IMG_DIR);
 }
 
 function defaultErrorHandler(err) {
   if (err instanceof Error) {
-    console.error(err, err.stack);
+    logger.error(err, err.stack);
   } else {
     let msg = typeof err === "string" ? err : JSON.stringify(err);
-    console.error(`Error: ${msg}`);
+    logger.error(`${msg}`);
   }
 }
 
 function handleTrackError(track, err) {
-  console.error(
+  logger.error(
     `Error occurred processing track '${track.title}' by ${track.artist}:`
   );
   defaultErrorHandler(err);
@@ -124,7 +130,7 @@ function sendGenericFailureMessage(toEmail) {
 async function loadRecentUserActivity(user, timeRangeOptions = {}) {
   let to = timeRangeOptions.to || moment();
   let from = timeRangeOptions.from || moment(to).subtract(7, "days");
-  console.log(`Getting activity from ${from.toString()} to ${to.toString()}`);
+  logger.info(`Getting activity from ${from.toString()} to ${to.toString()}`);
 
   const reader = new RecentTracks({
     apikey: process.env.LAST_FM_API_KEY,
@@ -150,12 +156,12 @@ async function loadRecentUserActivity(user, timeRangeOptions = {}) {
   });
 
   reader.on("retry", ({ error, message, retryNum, retryAfterMs, url }) => {
-    console.error(
+    logger.error(
       `Failure (${retryNum}) ${url}: ${message}. Retrying in ${retryAfterMs}`
     );
   });
 
-  // reader.on("progress", console.log);
+  // reader.on("progress", logger.info);
 
   let trackDurationPromises = [];
 
@@ -166,7 +172,7 @@ async function loadRecentUserActivity(user, timeRangeOptions = {}) {
           // check cache
           let cachedTrackLength = songLengthCache.get(track);
           // if (cachedTrackLength != null) {
-          //   console.log(`Cache hit for '${track.title}' by '${track.artist}'!`);
+          //   logger.info(`Cache hit for '${track.title}' by '${track.artist}'!`);
           // }
           resolve(cachedTrackLength);
         })
@@ -221,8 +227,8 @@ async function loadRecentUserActivity(user, timeRangeOptions = {}) {
           .then(
             (trackLength) => {
               if (trackLength == null || trackLength <= 0) {
-                console.error(
-                  `ERROR: No track duration found for track '${track.title}' by ${track.artist}`
+                logger.error(
+                  `No track duration found for track '${track.title}' by ${track.artist}`
                 );
               } else {
                 track.length = trackLength;
@@ -262,8 +268,8 @@ function buildActivity(streamedTracks) {
         track.artist
       );
       if (!albumListening.variousArtists && artistNameSimilarity < 0.8) {
-        console.warn(
-          `WARN: Track [${track.title}] artist [${track.artist}] is different than album artist [${albumListening.album.artist}], similarity = [${artistNameSimilarity}] - marking album as various artists`
+        logger.warn(
+          `Track [${track.title}] artist [${track.artist}] is different than album artist [${albumListening.album.artist}], similarity = [${artistNameSimilarity}] - marking album as various artists`
         );
         albumListening.variousArtists = true;
       }
@@ -329,7 +335,7 @@ app.get("/", (req, res) => {
 
 app.post("/collage", (req, res) => {
   if (isBlank(req.cookies[COOKIE_SPOTIFY_ACCESS_TOKEN])) {
-    console.log(`No spotify access token, redirection to ${SPOTIFY_AUTH_PATH}`);
+    logger.info(`No spotify access token, redirection to ${SPOTIFY_AUTH_PATH}`);
     res.redirect(
       SPOTIFY_AUTH_PATH +
         "?" +
@@ -354,7 +360,7 @@ app.post("/collage", (req, res) => {
         from: from,
         to: to,
       }).then((imageFileName) => {
-        console.log(`Successfully generated collage image [${imageFileName}]`);
+        logger.info(`Successfully generated collage image [${imageFileName}]`);
       });
       res
         .status(200)
@@ -409,7 +415,7 @@ app.get(SPOTIFY_AUTH_CALLBACK_PATH, (req, res) => {
           httpOnly: true, // http only, prevents JavaScript cookie access
           // secure: true, // cookie must be sent over https / ssl
         });
-        console.log(
+        logger.info(
           `Saved cookie ${COOKIE_SPOTIFY_ACCESS_TOKEN}="${response.access_token}"`
         );
         res.redirect("/");
@@ -443,7 +449,7 @@ function requestSpotifyAccessToken(formData, callback) {
     res.on("end", () => callback(JSON.parse(responseText)));
   });
   req.on("error", (e) => {
-    console.error(e);
+    logger.error(e);
   });
 
   req.write(formData);
@@ -452,7 +458,7 @@ function requestSpotifyAccessToken(formData, callback) {
 
 const server = app.listen(APP_PORT, (err) => {
   if (err) defaultErrorHandler(err);
-  console.log(`App listening on port ${APP_PORT}`);
+  logger.info(`App listening on port ${APP_PORT}`);
 });
 
 server.keepAliveTimeout = getConfigValueNumber(
@@ -464,7 +470,7 @@ server.headersTimeout = getConfigValueNumber(
   "60000"
 );
 
-console.log(
+logger.info(
   `App keepAliveTimeout [${server.keepAliveTimeout}] headersTimeout [${server.headersTimeout}]`
 );
 
@@ -483,10 +489,11 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
   return collageGenerationQueue.add(() => {
     // Generate collage
     let startTimestamp = moment().unix();
-    let imageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
-    console.log(
+    let collageImageFileName = `${lastFmUser}-${startTimestamp}.jpg`;
+    logger.info(
       `Generating collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`
     );
+    let collageImageFilePath = `${PUBLIC_IMG_DIR}/${collageImageFileName}`;
     return benchmarkPromise(
       `generate collage for user [${lastFmUser}] from [${timeRangeOptions.from.format()}] to [${timeRangeOptions.to.format()}]`,
       loadRecentUserActivity(lastFmUser, timeRangeOptions)
@@ -495,10 +502,7 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
         )
         .then(
           (activity) =>
-            collageGeneratorService.generate(
-              `${PUBLIC_IMG_DIR}/${imageFileName}`,
-              activity
-            ),
+            collageGeneratorService.generate(collageImageFilePath, activity),
           defaultErrorHandler
         )
         .then(
@@ -515,24 +519,31 @@ function generateAndEmailCollage(lastFmUser, toEmail, timeRangeOptions) {
         )
         .then(() => {
           if (isNotBlank(toEmail)) {
-            return emailService.send({
-              subject: `Your last.fm collage...`,
-              to: toEmail,
-              html: `Listening activity for ${lastFmUser} from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${imageFileName}"/>`,
-              attachments: [
-                {
-                  filename: imageFileName,
-                  path: `${PUBLIC_IMG_DIR}/${imageFileName}`,
-                  cid: imageFileName, //same cid value as in the html img src
-                },
-              ],
-            });
+            return emailService
+              .send({
+                subject: `Your last.fm collage...`,
+                to: toEmail,
+                html: `Listening activity for ${lastFmUser} from ${timeRangeOptions.from.format()} to ${timeRangeOptions.to.format()}:<br/><img src="cid:${collageImageFileName}"/>`,
+                attachments: [
+                  {
+                    filename: collageImageFileName,
+                    path: collageImageFilePath,
+                    cid: collageImageFileName, //same cid value as in the html img src
+                  },
+                ],
+              })
+              .then((info) => {
+                if (fs.existsSync(collageImageFilePath)) {
+                  fs.unlinkSync(collageImageFilePath);
+                }
+                return info;
+              }, defaultErrorHandler);
           } else {
             return Promise.resolve();
           }
         }, defaultErrorHandler)
         .then(
-          () => imageFileName,
+          () => collageImageFileName,
           (reason) => {
             if (isNotBlank(toEmail)) {
               sendGenericFailureMessage(toEmail);

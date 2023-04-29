@@ -20,7 +20,8 @@
     "scrobbles": "^0.3.0",
     "spotify-web-api-node": "^5.0.2",
     "string-similarity": "^4.0.4",
-    "throttled-queue": "^2.1.4"
+    "throttled-queue": "^2.1.4",
+    "winston": "^3.8.2"
   },
   "scripts": {
     "test": "node node_modules/mocha/bin/mocha.js 'test/**/*.js'",
