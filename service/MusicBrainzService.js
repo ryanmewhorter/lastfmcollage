@@ -5,6 +5,7 @@ import Fuse from "fuse.js";
 import { requireNotBlank } from "../Utils.js";
 import throttledQueue from "throttled-queue";
 import FileSystemCache from "./CacheService.js";
+import logger from "../logger.js";
 
 const HOST_NAME = "musicbrainz.org";
 const API_ROOT = "/ws/2";
@@ -49,7 +50,7 @@ export default class MusicBrainzService {
       const cachedMbEntity = JSON.parse(cachedMbEntityRaw);
       callback(cachedMbEntity);
     } else {
-      console.log(
+      logger.info(
         `MusicBrainz album cache miss for album [${track.album.title}] with mbId [${albumMbId}]`
       );
       this.throttleRequest(() => {
@@ -130,12 +131,12 @@ export default class MusicBrainzService {
               keys: ["title"],
             });
             let searchByTitleResults = fuse.search(track.title);
-            console.log(
+            logger.info(
               `MusicBrainz query on mbId [${track.album.mbId}] for track with title [${track.title}] returned [${searchByTitleResults.length}] results.`
             );
             if (searchByTitleResults.length > 1) {
-              console.warn(
-                `WARNING: More than one result for track '${track.title}' by ${track.artist}. Using first track.`
+              logger.warn(
+                `More than one result for track '${track.title}' by ${track.artist}. Using first track.`
               );
             }
             matchingTrack = searchByTitleResults.length

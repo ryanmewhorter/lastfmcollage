@@ -2,6 +2,7 @@ import LastFM from "last-fm";
 import Track from "../model/Track.js";
 import throttledQueue from "throttled-queue";
 import { requireNotBlank } from "../Utils.js";
+import logger from "../logger.js";
 
 export default class LastFmService {
   constructor(lastFmApiKey, options = {}) {
@@ -26,8 +27,8 @@ export default class LastFmService {
           { name: track.title, artistName: track.artist },
           (error, data) => {
             if (error) {
-              console.warn(
-                `WARNING: Could not get Last.FM track info for '${track.title}' by '${track.artist}': ${error.message}`
+              logger.warn(
+                `Could not get Last.FM track info for '${track.title}' by '${track.artist}': ${error.message}`
               );
               resolve(null);
             } else {

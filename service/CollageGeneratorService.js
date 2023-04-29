@@ -5,6 +5,7 @@ import * as PImage from "pureimage";
 import * as fs from "fs";
 import { trimText } from "../Utils.js";
 import ActivitySummary from "../model/ActivitySummary.js";
+import logger from "../logger.js";
 
 const ALBUM_ART_SIZE = 300;
 
@@ -112,7 +113,7 @@ export default class CollageGeneratorService {
         getImage(albumListening.album.cover)
           .then(
             (albumCover) => {
-              console.log(
+              logger.info(
                 `Rendering album art for album #${i + 1} ['${
                   albumListening.album.title
                 }' by ${
@@ -130,14 +131,14 @@ export default class CollageGeneratorService {
               );
             },
             (error) => {
-              console.error(
-                `Error getting album image for album [${albumListening.album.title}] with cover [${albumListening.album.cover}]: ${error.message}`
+              logger.warn(
+                `Could not get album art for album [${albumListening.album.title}] with cover [${albumListening.album.cover}]: ${error.message}`
               );
             }
           )
           .then(() => {
             if (this.showListeningTime) {
-              console.log(
+              logger.info(
                 `Rendering listening time [${
                   albumListening.length
                 }] for album #${i + 1} [${
@@ -179,14 +180,14 @@ export default class CollageGeneratorService {
       .then(
         () => save(canvas, path),
         (reason) => {
-          console.error(`Error occurred drawing collage: ${reason}`);
+          logger.error(`Error occurred drawing collage: ${reason}`);
           throw new Error(reason);
         }
       )
       .then(
         () => activitySummary,
         (reason) => {
-          console.error(`Error occurred saving collage to file: ${reason}`);
+          logger.error(`Error occurred saving collage to file: ${reason}`);
           throw new Error(reason);
         }
       );

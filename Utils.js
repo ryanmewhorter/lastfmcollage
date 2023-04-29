@@ -1,4 +1,5 @@
 import moment from "moment";
+import logger from "./logger.js";
 
 export function isBlank(value) {
   return value == null || (typeof value === "string" && value.trim() === "");
@@ -71,14 +72,31 @@ export function benchmarkPromise(taskName, promise) {
   });
 }
 
+export function getConfigValueString(key, defaultValue) {
+  if (isNotBlank(process.env[key])) {
+    return process.env[key];
+  }
+  if (defaultValue == null) {
+    throw new Error(`Required configuration value not found for key [${key}]`);
+  }
+  return defaultValue;
+}
+
+export function getConfigValueNumber(key, defaultValue) {
+  let value = getConfigValueString(key, defaultValue);
+  if (isNotBlank(value)) {
+    return parseInt(value, 10);
+  }
+}
+
 function logTaskStart(taskName, start) {
-  console.log(`Task [${taskName}] started at [${moment.utc(start).format()}].`);
+  logger.info(`Task [${taskName}] started at [${moment.utc(start).format()}].`);
 }
 
 function logTaskComplete(taskName, start) {
   let end = Date.now();
   let elapsedTime = moment.duration(end - start, "ms");
-  console.log(
+  logger.info(
     `Task [${taskName}] completed at [${moment
       .utc(end)
       .format()}] and took ${elapsedTime.minutes()}m ${elapsedTime.seconds()}s.`

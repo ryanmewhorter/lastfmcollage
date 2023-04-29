@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+import logger from "./logger.js";
 import moment from "moment-timezone";
 import { RecentTracks } from "scrobbles";
 import Track from "./model/Track.js";
@@ -5,7 +8,6 @@ import CollageGeneratorService from "./service/CollageGeneratorService.js";
 import MusicBrainzService from "./service/MusicBrainzService.js";
 import express from "express";
 import Album from "./model/Album.js";
-import dotenv from "dotenv";
 import SpotifyService from "./service/SpotifyService.js";
 import BandcampService from "./service/BandcampService.js";
 import {
@@ -15,6 +17,8 @@ import {
   benchmarkPromise,
   isNotBlank,
   requireNotBlank,
+  getConfigValueString,
+  getConfigValueNumber,
 } from "./Utils.js";
 import querystring from "querystring";
 import https from "https";
@@ -28,10 +32,7 @@ import fs from "fs";
 import helmet from "helmet";
 import stringSimilarity from "string-similarity";
 import PromiseQueue from "promise-queue";
-import winston from "winston";
 import ActivitySummary from "./model/ActivitySummary.js";
-
-dotenv.config();
 
 const HOST = getConfigValueString("HOST", "localhost");
 const APP_PORT = getConfigValueNumber("APP_PORT", "8080");
@@ -88,11 +89,6 @@ const WHITELISTED_USERS = (process.env.WHITELISTED_LAST_FM_USERS || "")
 const __filename = fileURLToPath(import.meta.url); // for __dirname support
 const __dirname = dirname(__filename);
 const PUBLIC_IMG_DIR = `${__dirname}/public/img`;
-
-const logger = winston.createLogger({
-  level: getConfigValueString("LOG_LEVEL", "warn"),
-  transports: [new winston.transports.Console()],
-});
 
 if (!fs.existsSync(PUBLIC_IMG_DIR)) {
   fs.mkdirSync(PUBLIC_IMG_DIR);
@@ -524,6 +520,7 @@ function generateAndEmailCollage(lastFmUser, toEmail, from, to) {
         )
         .then(
           (activitySummary) => {
+            // TODO: Add elapsed time message to activity summary
             songLengthCache.save();
             musicBrainzService.mbAlbumCache.save();
             return activitySummary;
@@ -556,6 +553,9 @@ function generateAndEmailCollage(lastFmUser, toEmail, from, to) {
               })
               .then((info) => {
                 if (fs.existsSync(collageImageFilePath)) {
+                  logger.debug(
+                    `Email was sent successfully - deleting collage file [${collageImageFilePath}]`
+                  );
                   fs.unlinkSync(collageImageFilePath);
                 }
                 return info;
@@ -602,21 +602,4 @@ function validateQueryParams(params) {
 function isHealthCheck(req) {
   let userAgent = req.get("user-agent");
   return isNotBlank(userAgent) && userAgent.includes("ELB-HealthChecker");
-}
-
-function getConfigValueString(key, defaultValue) {
-  if (isNotBlank(process.env[key])) {
-    return process.env[key];
-  }
-  if (defaultValue == null) {
-    throw new Error(`Required configuration value not found for key [${key}]`);
-  }
-  return defaultValue;
-}
-
-function getConfigValueNumber(key, defaultValue) {
-  let value = getConfigValueString(key, defaultValue);
-  if (isNotBlank(value)) {
-    return parseInt(value, 10);
-  }
 }

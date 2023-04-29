@@ -1,5 +1,6 @@
 import bandcamp from "bandcamp-scraper";
 import throttledQueue from "throttled-queue";
+import logger from "../logger.js";
 
 export default class BandcampService {
   constructor(options = {}) {
@@ -22,7 +23,7 @@ export default class BandcampService {
           if (error) {
             reject(error);
           } else {
-            console.log(
+            logger.info(
               `Bandcamp query [${query}] returned [${results.length}] results`
             );
             if (results == null || results.length === 0) {
@@ -31,8 +32,8 @@ export default class BandcampService {
             } else {
               let url = results[0].url;
               if (results.length > 1) {
-                console.warn(
-                  `WARNING: More than one result for track '${track.title}' by ${track.artist}. Using first track at url [${url}]`
+                logger.warn(
+                  `More than one result for track '${track.title}' by ${track.artist}. Using first track at url [${url}]`
                 );
               }
               bandcamp.getTrackInfo(url, (error, bcTrackInfo) => {

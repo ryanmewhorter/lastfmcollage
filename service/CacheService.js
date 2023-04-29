@@ -1,6 +1,7 @@
 import fs from "fs";
 import { benchmark } from "../Utils.js";
 const DEFAULT_EXPIRATION_MS = 2629800000; // 1 month
+import logger from "../logger.js";
 
 function load(fileName) {
   if (fs.existsSync(fileName) && fileName.endsWith(".json")) {
@@ -30,7 +31,7 @@ export default class FileSystemCache {
   }
 
   save() {
-    console.log(`Saving cache [${this.fileName}]...`);
+    logger.info(`Saving cache [${this.fileName}]...`);
     benchmark(`Save file system cache [${this.fileName}]`, () => {
       this.clean();
       fs.writeFileSync(this.fileName, JSON.stringify(this.store));
@@ -38,11 +39,11 @@ export default class FileSystemCache {
   }
 
   clean() {
-    console.log(`Cleaning cache [${this.fileName}]...`);
+    logger.info(`Cleaning cache [${this.fileName}]...`);
     let now = Date.now();
     for (let key of Object.keys(this.store)) {
       if (now >= this.store[key].e) {
-        console.log(`Key ${key} has expired.`);
+        logger.info(`Key ${key} has expired.`);
         delete this.store[key];
       }
     }
@@ -68,9 +69,7 @@ export default class FileSystemCache {
       }
       return storeItem.v;
     } else if (this.warnCacheMisses) {
-      console.warn(
-        `WARNING: Cache miss for key [${key}] in cache [${this.fileName}]`
-      );
+      logger.warn(`Cache miss for key [${key}] in cache [${this.fileName}]`);
     }
     return null;
   }
